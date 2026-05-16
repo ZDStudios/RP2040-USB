@@ -22,11 +22,11 @@ interface IMMDevice {
 }
 [Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 interface IAudioEndpointVolume {
-    int R1(); int R2();
+    int R1(); int R2(); int R3(); int R4();
     [PreserveSig] int SetMasterVolumeLevelScalar(float fLevel, Guid pguidEventContext);
-    int R3();
+    int R5();
     [PreserveSig] int GetMasterVolumeLevelScalar(out float pfLevel);
-    int R4(); int R5(); int R6(); int R7();
+    int R6(); int R7(); int R8(); int R9();
     [PreserveSig] int SetMute(bool bMute, Guid pguidEventContext);
     [PreserveSig] int GetMute(out bool pbMute);
 }
@@ -111,8 +111,8 @@ $musicTimer          = New-Object System.Windows.Forms.Timer
 $musicTimer.Interval = 2000
 $musicTimer.Add_Tick({
     if ($script:wmp -eq $null -and (Test-Path $script:mp3Path)) {
-        $script:wmp       = New-Object -ComObject WMPlayer.OCX
-        $script:wmp.URL   = $script:mp3Path
+        $script:wmp     = New-Object -ComObject WMPlayer.OCX
+        $script:wmp.URL = $script:mp3Path
         $script:wmp.controls.play()
         $musicTimer.Stop()
     }
@@ -124,8 +124,8 @@ $volTimer          = New-Object System.Windows.Forms.Timer
 $volTimer.Interval = 500
 $volTimer.Add_Tick({
     try {
-        if ([AudioCtrl]::GetMute())                                      { [AudioCtrl]::SetMute($false) }
-        if ([math]::Abs([AudioCtrl]::Get() - 0.30) -gt 0.01)            { [AudioCtrl]::Set(0.30) }
+        if ([AudioCtrl]::GetMute())                                  { [AudioCtrl]::SetMute($false) }
+        if ([math]::Abs([AudioCtrl]::Get() - 0.30) -gt 0.01)        { [AudioCtrl]::Set(0.30) }
     } catch {}
 })
 $volTimer.Start()
