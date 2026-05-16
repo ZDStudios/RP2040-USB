@@ -6,7 +6,7 @@ Add-Type -Name WinAPI -Namespace "" -MemberDefinition @'
 '@
 [WinAPI]::ShowWindow([WinAPI]::GetConsoleWindow(), 0) | Out-Null
 
-# ── CoreAudio Volume Control ──────────────────────────────────────────────────
+# ── CoreAudio Volume + Mute Control ──────────────────────────────────────────
 Add-Type -TypeDefinition @'
 using System; using System.Runtime.InteropServices;
 [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class MMDeviceEnumeratorCls {}
@@ -26,6 +26,9 @@ interface IAudioEndpointVolume {
     [PreserveSig] int SetMasterVolumeLevelScalar(float fLevel, Guid pguidEventContext);
     int R3();
     [PreserveSig] int GetMasterVolumeLevelScalar(out float pfLevel);
+    int R4(); int R5(); int R6(); int R7();
+    [PreserveSig] int SetMute(bool bMute, Guid pguidEventContext);
+    [PreserveSig] int GetMute(out bool pbMute);
 }
 public class AudioCtrl {
     static IAudioEndpointVolume EP() {
@@ -35,16 +38,20 @@ public class AudioCtrl {
         object o; d.Activate(ref g, 23, IntPtr.Zero, out o);
         return (IAudioEndpointVolume)o;
     }
-    public static void Set(float v) { EP().SetMasterVolumeLevelScalar(v, Guid.Empty); }
-    public static float Get()       { float v; EP().GetMasterVolumeLevelScalar(out v); return v; }
+    public static void Set(float v)    { EP().SetMasterVolumeLevelScalar(v, Guid.Empty); }
+    public static float Get()          { float v; EP().GetMasterVolumeLevelScalar(out v); return v; }
+    public static void SetMute(bool m) { EP().SetMute(m, Guid.Empty); }
+    public static bool GetMute()       { bool m; EP().GetMute(out m); return m; }
 }
 '@
 
-# Save original volume then lock to 30%
-$script:origVol = [AudioCtrl]::Get()
+# Save original state, unmute and force 30%
+$script:origVol  = [AudioCtrl]::Get()
+$script:origMute = [AudioCtrl]::GetMute()
+[AudioCtrl]::SetMute($false)
 [AudioCtrl]::Set(0.30)
 
-# ── Download MP3 in Background ────────────────────────────────────────────────
+# ── Download MP3 silently in background ───────────────────────────────────────
 Start-Job -ScriptBlock {
     $dest = "$env:USERPROFILE\TOOTHLESS"
     if (!(Test-Path $dest)) { New-Item -ItemType Directory -Path $dest | Out-Null }
@@ -64,9 +71,9 @@ if (!(Test-Path $gifTemp)) { Invoke-WebRequest -Uri $gifUrl -OutFile $gifTemp }
 
 $script:allowClose = $false
 
-$form = New-Object System.Windows.Forms.Form
+$form                 = New-Object System.Windows.Forms.Form
 $form.Text            = "Toothless"
-$form.Size            = New-Object System.Drawing.Size(300,300)
+$form.Size            = New-Object System.Drawing.Size(300, 300)
 $form.FormBorderStyle = "FixedSingle"
 $form.MaximizeBox     = $false
 $form.StartPosition   = "Manual"
@@ -82,38 +89,45 @@ $form.Controls.Add($pic)
 $screen    = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
 $form.Left = Get-Random -Minimum 0 -Maximum ($screen.Width  - 300)
 $form.Top  = Get-Random -Minimum 0 -Maximum ($screen.Height - 300)
-$script:dx = 5; $script:dy = 5
+$script:dx = 5
+$script:dy = 5
 
 # ── Bounce Timer ──────────────────────────────────────────────────────────────
-$bounceTimer = New-Object System.Windows.Forms.Timer
+$bounceTimer          = New-Object System.Windows.Forms.Timer
 $bounceTimer.Interval = 20
 $bounceTimer.Add_Tick({
-    $form.Left += $script:dx; $form.Top += $script:dy
+    $form.Left += $script:dx
+    $form.Top  += $script:dy
     if ($form.Left -le 0 -or ($form.Left + $form.Width)  -ge $screen.Width)  { $script:dx = -$script:dx }
     if ($form.Top  -le 0 -or ($form.Top  + $form.Height) -ge $screen.Height) { $script:dy = -$script:dy }
 })
 $bounceTimer.Start()
 
-# ── Music: wait for MP3 to finish downloading then auto-play ──────────────────
+# ── Music: poll until MP3 downloaded then play ────────────────────────────────
 $script:wmp     = $null
 $script:mp3Path = "$env:USERPROFILE\TOOTHLESS\toothless.mp3"
 
-$musicTimer = New-Object System.Windows.Forms.Timer
+$musicTimer          = New-Object System.Windows.Forms.Timer
 $musicTimer.Interval = 2000
 $musicTimer.Add_Tick({
     if ($script:wmp -eq $null -and (Test-Path $script:mp3Path)) {
-        $script:wmp = New-Object -ComObject WMPlayer.OCX
-        $script:wmp.URL = $script:mp3Path
+        $script:wmp       = New-Object -ComObject WMPlayer.OCX
+        $script:wmp.URL   = $script:mp3Path
         $script:wmp.controls.play()
         $musicTimer.Stop()
     }
 })
 $musicTimer.Start()
 
-# ── Volume Enforcer: reset to 30% every 500ms ─────────────────────────────────
-$volTimer = New-Object System.Windows.Forms.Timer
+# ── Volume Enforcer: unmute + lock at 30% every 500ms ────────────────────────
+$volTimer          = New-Object System.Windows.Forms.Timer
 $volTimer.Interval = 500
-$volTimer.Add_Tick({ try { if ([AudioCtrl]::Get() -ne 0.30) { [AudioCtrl]::Set(0.30) } } catch {} })
+$volTimer.Add_Tick({
+    try {
+        if ([AudioCtrl]::GetMute())                                      { [AudioCtrl]::SetMute($false) }
+        if ([math]::Abs([AudioCtrl]::Get() - 0.30) -gt 0.01)            { [AudioCtrl]::Set(0.30) }
+    } catch {}
+})
 $volTimer.Start()
 
 # ── Kill Switch: press 8 three times within 3 seconds ────────────────────────
@@ -121,11 +135,11 @@ $script:eightCount = 0
 $script:lastEight  = [DateTime]::MinValue
 $script:prevDown   = $false
 
-$killTimer = New-Object System.Windows.Forms.Timer
+$killTimer          = New-Object System.Windows.Forms.Timer
 $killTimer.Interval = 30
 $killTimer.Add_Tick({
-    $isDown = (([WinAPI]::GetAsyncKeyState(0x38) -band 0x8000) -ne 0) -or  # '8' key
-              (([WinAPI]::GetAsyncKeyState(0x68) -band 0x8000) -ne 0)       # Numpad 8
+    $isDown = (([WinAPI]::GetAsyncKeyState(0x38) -band 0x8000) -ne 0) -or
+              (([WinAPI]::GetAsyncKeyState(0x68) -band 0x8000) -ne 0)
 
     if ($isDown -and -not $script:prevDown) {
         $now = [DateTime]::Now
@@ -134,9 +148,13 @@ $killTimer.Add_Tick({
         $script:lastEight = $now
 
         if ($script:eightCount -ge 3) {
-            $bounceTimer.Stop(); $musicTimer.Stop(); $volTimer.Stop(); $killTimer.Stop()
+            $bounceTimer.Stop()
+            $musicTimer.Stop()
+            $volTimer.Stop()
+            $killTimer.Stop()
             if ($script:wmp) { try { $script:wmp.controls.stop() } catch {} }
-            [AudioCtrl]::Set($script:origVol)   # restore original volume
+            [AudioCtrl]::Set($script:origVol)
+            [AudioCtrl]::SetMute($script:origMute)
             $script:allowClose = $true
             $form.Close()
         }
