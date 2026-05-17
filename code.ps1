@@ -45,11 +45,11 @@ public class AudioCtrl {
 }
 '@
 
-# Save original state, unmute and force 30%
+# Save original state, unmute and force 50%
 $script:origVol  = [AudioCtrl]::Get()
 $script:origMute = [AudioCtrl]::GetMute()
 [AudioCtrl]::SetMute($false)
-[AudioCtrl]::Set(0.45)
+[AudioCtrl]::Set(0.50)
 
 # ── Download MP3 silently in background ───────────────────────────────────────
 Start-Job -ScriptBlock {
