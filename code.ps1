@@ -119,13 +119,13 @@ $musicTimer.Add_Tick({
 })
 $musicTimer.Start()
 
-# ── Volume Enforcer: unmute + lock at 30% every 500ms ────────────────────────
+# ── Volume Enforcer: unmute + lock at 50% every 500ms ────────────────────────
 $volTimer          = New-Object System.Windows.Forms.Timer
 $volTimer.Interval = 500
 $volTimer.Add_Tick({
     try {
         if ([AudioCtrl]::GetMute())                                  { [AudioCtrl]::SetMute($false) }
-        if ([math]::Abs([AudioCtrl]::Get() - 0.30) -gt 0.01)        { [AudioCtrl]::Set(0.30) }
+        if ([math]::Abs([AudioCtrl]::Get() - 0.50) -gt 0.01)        { [AudioCtrl]::Set(0.50) }
     } catch {}
 })
 $volTimer.Start()
