@@ -49,7 +49,7 @@ public class AudioCtrl {
 $script:origVol  = [AudioCtrl]::Get()
 $script:origMute = [AudioCtrl]::GetMute()
 [AudioCtrl]::SetMute($false)
-[AudioCtrl]::Set(0.30)
+[AudioCtrl]::Set(0.1)
 
 # ── Download MP3 silently in background ───────────────────────────────────────
 Start-Job -ScriptBlock {
@@ -125,7 +125,7 @@ $volTimer.Interval = 500
 $volTimer.Add_Tick({
     try {
         if ([AudioCtrl]::GetMute())                                  { [AudioCtrl]::SetMute($false) }
-        if ([math]::Abs([AudioCtrl]::Get() - 0.30) -gt 0.01)        { [AudioCtrl]::Set(0.30) }
+        if ([math]::Abs([AudioCtrl]::Get() - 0.1) -gt 0.01)        { [AudioCtrl]::Set(0.1) }
     } catch {}
 })
 $volTimer.Start()
