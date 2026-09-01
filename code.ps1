@@ -45,7 +45,7 @@ public class AudioCtrl {
 }
 '@
 
-# Save original state, unmute and force 50%
+# Save original state, unmute and force initial volume
 $script:origVol  = [AudioCtrl]::Get()
 $script:origMute = [AudioCtrl]::GetMute()
 [AudioCtrl]::SetMute($false)
@@ -70,38 +70,57 @@ $gifTemp = "$env:TEMP\toothless.gif"
 if (!(Test-Path $gifTemp)) { Invoke-WebRequest -Uri $gifUrl -OutFile $gifTemp }
 
 $script:allowClose = $false
+$script:activeWindows = [System.Collections.Generic.List[psobject]]::new()
+$screen = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
 
-$form                 = New-Object System.Windows.Forms.Form
-$form.Text            = "Toothless"
-$form.Size            = New-Object System.Drawing.Size(300, 300)
-$form.FormBorderStyle = "FixedSingle"
-$form.MaximizeBox     = $false
-$form.StartPosition   = "Manual"
-$form.TopMost         = $true
-$form.Add_FormClosing({ if (-not $script:allowClose) { $_.Cancel = $true } })
+# Function to spawn a new bouncing window
+function New-BouncyWindow {
+    $form                 = New-Object System.Windows.Forms.Form
+    $form.Text            = "Toothless"
+    $form.Size            = New-Object System.Drawing.Size(300, 300)
+    $form.FormBorderStyle = "FixedSingle"
+    $form.MaximizeBox     = $false
+    $form.StartPosition   = "Manual"
+    $form.TopMost         = $true
+    $form.Add_FormClosing({ if (-not $script:allowClose) { $_.Cancel = $true } })
 
-$pic          = New-Object System.Windows.Forms.PictureBox
-$pic.Dock     = "Fill"
-$pic.SizeMode = "StretchImage"
-$pic.Image    = [System.Drawing.Image]::FromFile($gifTemp)
-$form.Controls.Add($pic)
+    $pic          = New-Object System.Windows.Forms.PictureBox
+    $pic.Dock     = "Fill"
+    $pic.SizeMode = "StretchImage"
+    $pic.Image    = [System.Drawing.Image]::FromFile($gifTemp)
+    $form.Controls.Add($pic)
 
-$screen    = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
-$form.Left = Get-Random -Minimum 0 -Maximum ($screen.Width  - 300)
-$form.Top  = Get-Random -Minimum 0 -Maximum ($screen.Height - 300)
-$script:dx = 5
-$script:dy = 5
+    $form.Left = Get-Random -Minimum 0 -Maximum ([math]::Max(1, $screen.Width  - 300))
+    $form.Top  = Get-Random -Minimum 0 -Maximum ([math]::Max(1, $screen.Height - 300))
 
-# ── Bounce Timer ──────────────────────────────────────────────────────────────
+    $winObj = [pscustomobject]@{
+        Form = $form
+        DX   = (Get-Random -InputObject @(-5, 5))
+        DY   = (Get-Random -InputObject @(-5, 5))
+    }
+    $script:activeWindows.Add($winObj)
+    $form.Show()
+}
+
+# ── Bounce Timer (Updates all windows) ───────────────────────────────────────
 $bounceTimer          = New-Object System.Windows.Forms.Timer
 $bounceTimer.Interval = 20
 $bounceTimer.Add_Tick({
-    $form.Left += $script:dx
-    $form.Top  += $script:dy
-    if ($form.Left -le 0 -or ($form.Left + $form.Width)  -ge $screen.Width)  { $script:dx = -$script:dx }
-    if ($form.Top  -le 0 -or ($form.Top  + $form.Height) -ge $screen.Height) { $script:dy = -$script:dy }
+    foreach ($win in $script:activeWindows) {
+        $f = $win.Form
+        $f.Left += $win.DX
+        $f.Top  += $win.DY
+        if ($f.Left -le 0 -or ($f.Left + $f.Width)  -ge $screen.Width)  { $win.DX = -$win.DX }
+        if ($f.Top  -le 0 -or ($f.Top  + $f.Height) -ge $screen.Height) { $win.DY = -$win.DY }
+    }
 })
 $bounceTimer.Start()
+
+# ── Spawner Timer (Adds a new window every 5 seconds) ─────────────────────────
+$spawnTimer          = New-Object System.Windows.Forms.Timer
+$spawnTimer.Interval = 5000
+$spawnTimer.Add_Tick({ New-BouncyWindow })
+$spawnTimer.Start()
 
 # ── Music: poll until MP3 downloaded then play ────────────────────────────────
 $script:wmp     = $null
@@ -119,13 +138,13 @@ $musicTimer.Add_Tick({
 })
 $musicTimer.Start()
 
-# ── Volume Enforcer: unmute + lock at 50% every 500ms ────────────────────────
+# ── Volume Enforcer: unmute + lock at 30% every 500ms ────────────────────────
 $volTimer          = New-Object System.Windows.Forms.Timer
 $volTimer.Interval = 500
 $volTimer.Add_Tick({
     try {
-        if ([AudioCtrl]::GetMute())                                  { [AudioCtrl]::SetMute($false) }
-        if ([math]::Abs([AudioCtrl]::Get() - 0.1) -gt 0.01)        { [AudioCtrl]::Set(0.3) }
+        if ([AudioCtrl]::GetMute())                                { [AudioCtrl]::SetMute($false) }
+        if ([math]::Abs([AudioCtrl]::Get() - 0.3) -gt 0.01)        { [AudioCtrl]::Set(0.3) }
     } catch {}
 })
 $volTimer.Start()
@@ -149,6 +168,7 @@ $killTimer.Add_Tick({
 
         if ($script:eightCount -ge 3) {
             $bounceTimer.Stop()
+            $spawnTimer.Stop()
             $musicTimer.Stop()
             $volTimer.Stop()
             $killTimer.Stop()
@@ -156,11 +176,16 @@ $killTimer.Add_Tick({
             [AudioCtrl]::Set($script:origVol)
             [AudioCtrl]::SetMute($script:origMute)
             $script:allowClose = $true
-            $form.Close()
+            foreach ($win in $script:activeWindows) {
+                $win.Form.Close()
+            }
+            [System.Windows.Forms.Application]::Exit()
         }
     }
     $script:prevDown = $isDown
 })
 $killTimer.Start()
 
-[void]$form.ShowDialog()
+# Spawn the first window and start event loop
+New-BouncyWindow
+[System.Windows.Forms.Application]::Run()
