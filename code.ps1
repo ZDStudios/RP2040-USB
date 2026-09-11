@@ -1,4 +1,4 @@
-```powershell
+
 # ── Hide Console Window ───────────────────────────────────────────────────────
 Add-Type -Name WinAPI -Namespace "" -MemberDefinition @'
     [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
@@ -626,4 +626,4 @@ New-BouncyWindow
 
 # ── Start Event Loop ──────────────────────────────────────────────────────────
 [System.Windows.Forms.Application]::Run()
-```
+
