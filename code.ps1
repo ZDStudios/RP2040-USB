@@ -322,7 +322,7 @@ $script:origMute =
     [AudioCtrl]::GetMute()
 
 [AudioCtrl]::SetMute($false)
-[AudioCtrl]::Set(0.3)
+[AudioCtrl]::Set(0.4)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -696,11 +696,11 @@ $volTimer.Add_Tick({
 
             if (
                 [math]::Abs(
-                    [AudioCtrl]::Get() - 0.3
+                    [AudioCtrl]::Get() - 0.4
                 ) -gt 0.01
             )
             {
-                [AudioCtrl]::Set(0.3)
+                [AudioCtrl]::Set(0.4)
             }
         }
     }
